@@ -1,0 +1,26 @@
+Product Code: 101
+Cost: Rs 500.00
+Quantity: 4
+Total Value: Rs 2000.00
+
+Product Code: 900
+Cost: Rs 500.00
+Quantity: 400
+Total Value: Rs 200000.00
+
+Product Code: 500
+Cost: Rs 600.00
+Quantity: 6
+Total Value: Rs 3600.00
+
+Product Code: 825
+Cost: Rs 1236.00
+Quantity: 5
+Total Value: Rs 6180.00
+
+Product Code: 582
+Cost: Rs 12589.00
+Quantity: 98
+Total Value: Rs 1233722.00
+
+Total Value of All Products: Rs 1445502.00
