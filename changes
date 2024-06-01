@@ -1,0 +1,193 @@
+<?php
+ 
+ 
+/**
+ * 
+ *	Gmail attachment extractor.
+ *
+ *	Downloads attachments from Gmail and saves it to a file.
+ *	Uses PHP IMAP extension, so make sure it is enabled in your php.ini,
+ *	extension=php_imap.dll
+ *
+ *  Credits:  Sameer Borate email: metapix[at]gmail.com
+ */
+
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+ 
+set_time_limit(3000); 
+ 
+ 
+/* connect to gmail with your credentials */
+$GLOBALS['hostname'] = '{imap.gmail.com:993/imap/ssl}INBOX';
+$GLOBALS['username'] = 'policykitdownload@manipalcignaonline.com'; # e.g somebody@gmail.com
+$GLOBALS['password'] = 'Welcome01';
+$GLOBALS['folder'] = 'policyKit';
+
+if(!isset($_GET['policyNumber']) && empty($_GET['policyNumber'])) {
+    echo json_encode(array("status"=>false,"message"=>"Application Number is missing in URL parameters"));exit();
+}
+$GLOBALS['AppNo'] = htmlentities($_GET["policyNumber"], ENT_QUOTES);
+
+if($filename = __check_if_already_exist()){
+    __download_file($filename);
+}else{
+    if($emails = __check_if_email_with_application_no_exists()){
+        if($filename = __initiate_gmail_lookup_and_save_attachment($emails)){
+            __download_file($filename);
+        }else{
+            echo json_encode(array("status"=>false,"message"=>"Attachment in Application Number is Unavailable"));exit();
+        }
+    }else{
+        echo json_encode(array("status"=>false,"message"=>"Application Number Not Found"));exit();
+    }        
+}
+
+function __check_if_email_with_application_no_exists(){
+    $GLOBALS['Connection'] = imap_open($GLOBALS['hostname'],$GLOBALS['username'],$GLOBALS['password']) or die('Cannot connect to Gmail: ' . imap_last_error());
+    return $emails = imap_search($GLOBALS['Connection'],'SUBJECT "'.$GLOBALS['AppNo'].'"');
+}
+
+function __initiate_gmail_lookup_and_save_attachment($emails){
+    $inbox = $GLOBALS['Connection'];
+    /* try to connect */
+    $max_emails = 1; 
+ 
+    /* if any emails found, iterate through each email */
+    if($emails) {
+    
+        $count = 1;
+    
+        /* put the newest emails on top */
+        rsort($emails);
+    ;
+        /* for every email... */
+        foreach($emails as $email_number) 
+        {
+    
+            /* get information specific to this email */
+            $overview = imap_fetch_overview($inbox,$email_number,0);
+    
+            /* get mail message */
+            $message = imap_fetchbody($inbox,$email_number,2);//print_r($message);exit();
+    
+            /* get mail structure */
+            $structure = imap_fetchstructure($inbox, $email_number);
+    
+            $attachments = array();
+    
+            /* if any attachments found... */
+            if(isset($structure->parts) && count($structure->parts)) 
+            {
+                for($i = 0; $i < count($structure->parts); $i++) 
+                {
+                    $attachments[$i] = array(
+                        'is_attachment' => false,
+                        'filename' => '',
+                        'name' => '',
+                        'attachment' => ''
+                    );
+    
+                    if($structure->parts[$i]->ifdparameters) 
+                    {
+                        foreach($structure->parts[$i]->dparameters as $object) 
+                        {
+                            if(strtolower($object->attribute) == 'filename') 
+                            {
+                                $attachments[$i]['is_attachment'] = true;
+                                $attachments[$i]['filename'] = $object->value;
+                            }
+                        }
+                    }
+    
+                    if($structure->parts[$i]->ifparameters) 
+                    {
+                        foreach($structure->parts[$i]->parameters as $object) 
+                        {
+                            if(strtolower($object->attribute) == 'name') 
+                            {
+                                $attachments[$i]['is_attachment'] = true;
+                                $attachments[$i]['name'] = $object->value;
+                            }
+                        }
+                    }
+    
+                    if($attachments[$i]['is_attachment']) 
+                    {
+                        $attachments[$i]['attachment'] = imap_fetchbody($inbox, $email_number, $i+1);
+    
+                        /* 4 = QUOTED-PRINTABLE encoding */
+                        if($structure->parts[$i]->encoding == 3) 
+                        { 
+                            $attachments[$i]['attachment'] = base64_decode($attachments[$i]['attachment']);
+                        }
+                        /* 3 = BASE64 encoding */
+                        elseif($structure->parts[$i]->encoding == 4) 
+                        { 
+                            $attachments[$i]['attachment'] = quoted_printable_decode($attachments[$i]['attachment']);
+                        }
+                    }
+                }
+            }
+            /* iterate through each attachment and save it */
+            foreach($attachments as $attachment)
+            {
+                if($attachment['is_attachment'] == 1)
+                {
+                    $filename = $attachment['name'];
+                    if(empty($filename)) $filename = $attachment['filename'];
+    
+                    if(empty($filename)) $filename = time() . ".dat";
+    
+                    /* prefix the email number to the filename in case two emails
+                    * have the attachment with the same file name.
+                    */
+                    $Outputfilename = $GLOBALS['AppNo'] . "-" . $filename;
+                    $fp = fopen("./". $GLOBALS['folder'] ."/".$Outputfilename , "w+");
+                    fwrite($fp, $attachment['attachment']);
+                    fclose($fp);
+                }
+    
+            }
+    
+            if($count++ >= $max_emails) break;
+        }
+    
+    } 
+    
+    /* close the connection */
+    imap_close($inbox);
+    return $Outputfilename;
+}
+
+function __check_if_already_exist(){$filename = '';
+    $ext = 'pdf';$folder = $GLOBALS['folder'];
+    $files = glob($folder.'/*.'.$ext);$suffixLength = -9 - strlen($ext) - 1;
+    foreach ($files as $file) {
+        $nameWithDash = substr($file, strlen($folder)+1, $suffixLength);
+        $nameWithDashwithExt = substr($file, strlen($folder)+1);
+        $nameWithoutDash = explode ("-", $nameWithDash)[0];
+        if ($nameWithoutDash === $GLOBALS['AppNo']) {
+            $filename = $nameWithDashwithExt;
+            break;
+        }
+    }
+    return $filename;
+}
+
+function __download_file($filename){
+    $directoryFilePath = "./". $GLOBALS['folder'] ."/". $filename;
+   	$actualPolicyName = explode('-', $filename) [1];
+    header('Content-Description: File Transfer');
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="'.basename($actualPolicyName).'"');
+    header('Expires: 0');
+    header('Cache-Control: must-revalidate');
+    header('Pragma: public');
+    header('Content-Length: ' . filesize($directoryFilePath));
+    readfile($directoryFilePath);
+    exit;
+}
+ 
+?>
